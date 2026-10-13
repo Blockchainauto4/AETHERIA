@@ -1,0 +1,224 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  
+  .font-mono {
+    font-family: 'JetBrains Mono', monospace;
+  }
+}
+
+/* Custom subtle scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.6);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(51, 65, 85, 0.6);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(71, 85, 105, 0.8);
+}
+
+@keyframes pulse-slow {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 0.3;
+  }
+}
+
+.animate-pulse-slow {
+  animation: pulse-slow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Flying Vehicle Animations */
+@keyframes fly-vehicle-1 {
+  0% {
+    transform: translate3d(-10vw, 0, 0) scale(0.85);
+    opacity: 0;
+  }
+  5% {
+    opacity: 0.95;
+  }
+  50% {
+    transform: translate3d(50vw, -15px, 0) scale(1);
+    opacity: 1;
+  }
+  95% {
+    opacity: 0.95;
+  }
+  100% {
+    transform: translate3d(115vw, -30px, 0) scale(1.1);
+    opacity: 0;
+  }
+}
+
+@keyframes fly-vehicle-2 {
+  0% {
+    transform: translate3d(110vw, 0, 0) scale(0.65) scaleX(-1);
+    opacity: 0;
+  }
+  5% {
+    opacity: 0.85;
+  }
+  50% {
+    transform: translate3d(45vw, 12px, 0) scale(0.75) scaleX(-1);
+    opacity: 0.9;
+  }
+  95% {
+    opacity: 0.85;
+  }
+  100% {
+    transform: translate3d(-15vw, 25px, 0) scale(0.85) scaleX(-1);
+    opacity: 0;
+  }
+}
+
+@keyframes fly-vehicle-3 {
+  0% {
+    transform: translate3d(-5vw, 0, 0) scale(0.5);
+    opacity: 0;
+  }
+  8% {
+    opacity: 0.75;
+  }
+  50% {
+    transform: translate3d(55vw, -8px, 0) scale(0.55);
+    opacity: 0.85;
+  }
+  92% {
+    opacity: 0.75;
+  }
+  100% {
+    transform: translate3d(108vw, -12px, 0) scale(0.6);
+    opacity: 0;
+  }
+}
+
+@keyframes bridge-maglev {
+  0% {
+    transform: translate3d(15%, 0, 0) scale(0.7);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  50% {
+    transform: translate3d(46%, 10px, 0) scale(0.8);
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(78%, -4px, 0) scale(0.72);
+    opacity: 0;
+  }
+}
+
+@keyframes spin-ring-clock {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes spin-ring-counter {
+  0% {
+    transform: rotate(360deg);
+  }
+  100% {
+    transform: rotate(0deg);
+  }
+}
+
+@keyframes data-stream-up {
+  0% {
+    transform: translate3d(0, 0, 0);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.9;
+  }
+  80% {
+    opacity: 0.8;
+  }
+  100% {
+    transform: translate3d(0, -90px, 0);
+    opacity: 0;
+  }
+}
+
+@keyframes holo-scanline {
+  0% {
+    top: 0%;
+    opacity: 0.2;
+  }
+  50% {
+    opacity: 0.9;
+  }
+  100% {
+    top: 100%;
+    opacity: 0.2;
+  }
+}
+
+.anim-fly-1 {
+  animation: fly-vehicle-1 14s cubic-bezier(0.25, 1, 0.5, 1) infinite;
+}
+
+.anim-fly-2 {
+  animation: fly-vehicle-2 19s cubic-bezier(0.25, 1, 0.5, 1) infinite;
+  animation-delay: 3.5s;
+}
+
+.anim-fly-3 {
+  animation: fly-vehicle-3 24s linear infinite;
+  animation-delay: 8s;
+}
+
+.anim-maglev {
+  animation: bridge-maglev 11s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  animation-delay: 1.5s;
+}
+
+.anim-ring-1 {
+  animation: spin-ring-clock 20s linear infinite;
+}
+
+.anim-ring-2 {
+  animation: spin-ring-counter 26s linear infinite;
+}
+
+.anim-data-1 {
+  animation: data-stream-up 4s ease-out infinite;
+}
+
+.anim-data-2 {
+  animation: data-stream-up 5s ease-out infinite;
+  animation-delay: 1.8s;
+}
+
+.anim-data-3 {
+  animation: data-stream-up 4.5s ease-out infinite;
+  animation-delay: 3.1s;
+}
+
+.anim-scanline {
+  animation: holo-scanline 2.8s linear infinite;
+}

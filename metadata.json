@@ -1,0 +1,6 @@
+{
+  "name": "Aetheria Crypto Exchange & Ecosystem",
+  "description": "Corretora e ecossistema de criptomoedas de última geração com visualização interativa dos pilares, terminal de trading, swap e cofres de rendimento.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
