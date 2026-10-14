@@ -38,12 +38,27 @@ import {
   Check
 } from 'lucide-react';
 
+// Reusable Three.js Math Objects for Zero-GC Render Loop
+const _tmpV1 = new THREE.Vector3();
+const _tmpV2 = new THREE.Vector3();
+const _tmpDir = new THREE.Vector3();
+const _camFollowOffset = new THREE.Vector3();
+const _dummyMatrix = new THREE.Matrix4();
+const _dummyPosition = new THREE.Vector3();
+const _dummyQuaternion = new THREE.Quaternion();
+const _dummyScale = new THREE.Vector3(1, 1, 1);
+
 export const Citadel3DWorld: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const { assets, placeOrder, setActiveTab } = useExchange();
 
   // Camera & Visual Modes
   const [cameraMode, setCameraMode] = useState<'orbit' | 'follow' | 'top' | 'habitat'>('follow');
+  const cameraModeRef = useRef<'orbit' | 'follow' | 'top' | 'habitat'>(cameraMode);
+  useEffect(() => {
+    cameraModeRef.current = cameraMode;
+  }, [cameraMode]);
+
   const [timeOfDay, setTimeOfDay] = useState<'day' | 'sunset' | 'night'>('sunset');
   const [textureStyle, setTextureStyle] = useState<'realistic-pbr' | 'hologram' | 'solar-gold'>('realistic-pbr');
   const [showTextureMenu, setShowTextureMenu] = useState<boolean>(false);
@@ -210,8 +225,8 @@ export const Citadel3DWorld: React.FC = () => {
   useEffect(() => {
     if (!containerRef.current) return;
     const container = containerRef.current;
-    const width = container.clientWidth;
-    const height = container.clientHeight;
+    const width = Math.max(container.clientWidth || 0, 320);
+    const height = Math.max(container.clientHeight || 0, 240);
 
     // Scene
     const scene = new THREE.Scene();
@@ -288,7 +303,7 @@ export const Citadel3DWorld: React.FC = () => {
     const terrainGroup = new THREE.Group();
 
     // Central Main Island Platform with Organic Moss & Lichen PBR Texture
-    const islandGeo = new THREE.CylinderGeometry(28, 34, 4, 32);
+    const islandGeo = new THREE.CylinderGeometry(28, 34, 4.5, 32);
     const islandMat = new THREE.MeshStandardMaterial({
       map: terrainTex.map,
       bumpMap: terrainTex.bumpMap,
@@ -300,12 +315,12 @@ export const Citadel3DWorld: React.FC = () => {
       color: textureStyle === 'solar-gold' ? 0xd97706 : (textureStyle === 'hologram' ? 0x06b6d4 : 0xffffff),
     });
     const mainIsland = new THREE.Mesh(islandGeo, islandMat);
-    mainIsland.position.y = -2;
+    mainIsland.position.y = -2.25;
     mainIsland.receiveShadow = true;
     terrainGroup.add(mainIsland);
 
     // Stepped Upper Terrace with Cybernetic Hex-Pavers Texture
-    const terraceGeo = new THREE.CylinderGeometry(18, 22, 3, 24);
+    const terraceGeo = new THREE.CylinderGeometry(18, 22, 3.2, 24);
     const terraceMat = new THREE.MeshStandardMaterial({
       map: hexTilesTex.map,
       bumpMap: hexTilesTex.bumpMap,
@@ -318,7 +333,7 @@ export const Citadel3DWorld: React.FC = () => {
       wireframe: textureStyle === 'hologram',
     });
     const upperTerrace = new THREE.Mesh(terraceGeo, terraceMat);
-    upperTerrace.position.y = 0.5;
+    upperTerrace.position.y = 0.6;
     upperTerrace.receiveShadow = true;
     terrainGroup.add(upperTerrace);
 
@@ -337,7 +352,7 @@ export const Citadel3DWorld: React.FC = () => {
     });
     const waterMesh = new THREE.Mesh(waterGeo, waterMat);
     waterMesh.rotation.x = Math.PI / 2;
-    waterMesh.position.set(0, 1.2, 2);
+    waterMesh.position.set(0, 1.25, 2);
     terrainGroup.add(waterMesh);
 
     // Digital Waterfall Particles Flowing Down the Cliff
@@ -360,15 +375,115 @@ export const Citadel3DWorld: React.FC = () => {
     const waterfallParticles = new THREE.Points(wfGeo, wfMat);
     terrainGroup.add(waterfallParticles);
 
+    // 1B. INSTANCED PERIMETER DEFENSE SHIELD BEACONS (High-Performance 12-Pylon Grid)
+    const pylonGeo = new THREE.CylinderGeometry(0.3, 0.45, 2.2, 6);
+    const pylonMat = new THREE.MeshStandardMaterial({
+      map: titaniumSpireTex.map,
+      roughness: 0.3,
+      metalness: 0.85,
+      emissive: new THREE.Color(textureStyle === 'solar-gold' ? 0xf59e0b : 0x06b6d4),
+      emissiveIntensity: 0.4,
+      wireframe: textureStyle === 'hologram'
+    });
+    const pylonCount = 12;
+    const pylonInstanced = new THREE.InstancedMesh(pylonGeo, pylonMat, pylonCount);
+    for (let i = 0; i < pylonCount; i++) {
+      const angle = (i / pylonCount) * Math.PI * 2;
+      const radius = 27;
+      const px = Math.cos(angle) * radius;
+      const pz = Math.sin(angle) * radius;
+      _dummyPosition.set(px, 0.2, pz);
+      _dummyQuaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -angle);
+      _dummyMatrix.compose(_dummyPosition, _dummyQuaternion, _dummyScale);
+      pylonInstanced.setMatrixAt(i, _dummyMatrix);
+    }
+    pylonInstanced.instanceMatrix.needsUpdate = true;
+    pylonInstanced.computeBoundingSphere();
+    pylonInstanced.receiveShadow = true;
+    terrainGroup.add(pylonInstanced);
+
+    // 1C. CONNECTING CYBERNETIC SKYBRIDGES (Terrace to Habitats)
+    // Bridge 1: Terrace to Biodome Habitat
+    const bridge1Geo = new THREE.BoxGeometry(1.6, 0.25, 7.5);
+    const bridgeMat = new THREE.MeshStandardMaterial({
+      map: hexTilesTex.map,
+      roughness: 0.4,
+      metalness: 0.7,
+      wireframe: textureStyle === 'hologram'
+    });
+    const bridge1 = new THREE.Mesh(bridge1Geo, bridgeMat);
+    bridge1.position.set(-13.5, 1.6, -7.5);
+    bridge1.rotation.y = 0.58;
+    bridge1.receiveShadow = true;
+    terrainGroup.add(bridge1);
+
+    // Bridge 1 Glowing Cyan Handrails
+    const railMat = new THREE.MeshBasicMaterial({
+      color: textureStyle === 'solar-gold' ? 0xfbbf24 : 0x38bdf8
+    });
+    const rail1L = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.3, 7.5), railMat);
+    rail1L.position.set(-0.75, 0.25, 0);
+    bridge1.add(rail1L);
+    const rail1R = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.3, 7.5), railMat);
+    rail1R.position.set(0.75, 0.25, 0);
+    bridge1.add(rail1R);
+
+    // Bridge 2: Terrace to Staking Launchpad
+    const bridge2 = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.25, 6.2), bridgeMat);
+    bridge2.position.set(11.5, 1.6, 9.5);
+    bridge2.rotation.y = -0.52;
+    bridge2.receiveShadow = true;
+    terrainGroup.add(bridge2);
+
+    const rail2L = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.3, 6.2), railMat);
+    rail2L.position.set(-0.75, 0.25, 0);
+    bridge2.add(rail2L);
+    const rail2R = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.3, 6.2), railMat);
+    rail2R.position.set(0.75, 0.25, 0);
+    bridge2.add(rail2R);
+
     scene.add(terrainGroup);
 
     // ==========================================
-    // 2. MONUMENTAL CENTRAL SPIRE (BRUSHED TITANIUM TEXTURED)
+    // 2. MONUMENTAL CENTRAL SPIRE (OPTIMIZED MULTI-TIER ARCHITECTURE)
     // ==========================================
     const spireGroup = new THREE.Group();
 
-    // Tower Body with Precision Bolted Alloy Panels & Telemetry Decals
-    const towerGeo = new THREE.CylinderGeometry(1.2, 3.5, 36, 24);
+    // 2A. Heavy Foundation Podium & Structural Buttresses
+    const podiumGeo = new THREE.CylinderGeometry(5.2, 6.4, 2.5, 6);
+    const podiumMat = new THREE.MeshStandardMaterial({
+      map: titaniumSpireTex.map,
+      bumpMap: titaniumSpireTex.bumpMap,
+      bumpScale: 0.1,
+      roughness: 0.3,
+      metalness: 0.9,
+      wireframe: textureStyle === 'hologram'
+    });
+    const podium = new THREE.Mesh(podiumGeo, podiumMat);
+    podium.position.y = 1.6;
+    podium.receiveShadow = true;
+    podium.castShadow = true;
+    spireGroup.add(podium);
+
+    // 4 Cantilevered Hydraulic Buttresses gripping into terrace
+    const buttressGeo = new THREE.BoxGeometry(1.2, 3.2, 5.0);
+    const buttressMat = new THREE.MeshStandardMaterial({
+      map: titaniumSpireTex.map,
+      roughness: 0.25,
+      metalness: 0.92,
+      wireframe: textureStyle === 'hologram'
+    });
+    for (let b = 0; b < 4; b++) {
+      const buttress = new THREE.Mesh(buttressGeo, buttressMat);
+      buttress.rotation.y = (b * Math.PI) / 2;
+      buttress.position.set(Math.sin((b * Math.PI) / 2) * 4.2, 1.8, Math.cos((b * Math.PI) / 2) * 4.2);
+      buttress.rotation.x = 0.25 * (b % 2 === 0 ? (b === 0 ? 1 : -1) : 0);
+      buttress.castShadow = true;
+      spireGroup.add(buttress);
+    }
+
+    // 2B. Main Spire Core Shaft
+    const towerGeo = new THREE.CylinderGeometry(1.4, 3.2, 38, 16);
     const towerMat = new THREE.MeshStandardMaterial({
       map: titaniumSpireTex.map,
       bumpMap: titaniumSpireTex.bumpMap,
@@ -379,54 +494,105 @@ export const Citadel3DWorld: React.FC = () => {
       wireframe: textureStyle === 'hologram',
     });
     const tower = new THREE.Mesh(towerGeo, towerMat);
-    tower.position.y = 18;
+    tower.position.y = 20;
     tower.castShadow = true;
     spireGroup.add(tower);
 
-    // Crystal Spire Tip
-    const crystalGeo = new THREE.OctahedronGeometry(2.5, 2);
+    // 4 Vertical Quantum Radiator Cooling Fin Blades
+    const finGeo = new THREE.BoxGeometry(0.18, 26, 1.6);
+    const finMat = new THREE.MeshStandardMaterial({
+      color: 0x1e293b,
+      roughness: 0.4,
+      metalness: 0.8,
+      emissive: new THREE.Color(textureStyle === 'solar-gold' ? 0xd97706 : 0x0284c7),
+      emissiveIntensity: 0.45,
+      wireframe: textureStyle === 'hologram'
+    });
+    for (let f = 0; f < 4; f++) {
+      const fin = new THREE.Mesh(finGeo, finMat);
+      fin.position.y = 18;
+      fin.rotation.y = (f * Math.PI) / 2;
+      fin.position.x = Math.sin((f * Math.PI) / 2) * 2.2;
+      fin.position.z = Math.cos((f * Math.PI) / 2) * 2.2;
+      spireGroup.add(fin);
+    }
+
+    // 2C. Cantilever Observation & Trading Floor Deck
+    const deckGeo = new THREE.CylinderGeometry(4.2, 4.2, 1.4, 24);
+    const deckMat = new THREE.MeshStandardMaterial({
+      map: titaniumSpireTex.map,
+      roughness: 0.2,
+      metalness: 0.88,
+      wireframe: textureStyle === 'hologram'
+    });
+    const deck = new THREE.Mesh(deckGeo, deckMat);
+    deck.position.y = 16.5;
+    deck.castShadow = true;
+    spireGroup.add(deck);
+
+    // Panoramic Visor Window Belt
+    const visorBeltGeo = new THREE.CylinderGeometry(4.25, 4.25, 0.5, 24);
+    const visorBeltMat = new THREE.MeshBasicMaterial({
+      color: textureStyle === 'solar-gold' ? 0xfbbf24 : 0x38bdf8
+    });
+    const visorBelt = new THREE.Mesh(visorBeltGeo, visorBeltMat);
+    visorBelt.position.y = 16.5;
+    spireGroup.add(visorBelt);
+
+    // 2D. Levitating Quantum Crystal Monolith Tip
+    const crystalGeo = new THREE.OctahedronGeometry(2.4, 0);
     const crystalMat = new THREE.MeshStandardMaterial({
       color: textureStyle === 'solar-gold' ? 0xfbbf24 : 0x34d399,
       emissive: textureStyle === 'solar-gold' ? 0xd97706 : 0x10b981,
-      emissiveIntensity: 0.95,
+      emissiveIntensity: 1.1,
       roughness: 0.08,
       metalness: 0.95,
       wireframe: textureStyle === 'hologram'
     });
     const crystalTip = new THREE.Mesh(crystalGeo, crystalMat);
-    crystalTip.position.y = 37;
+    crystalTip.position.y = 40;
     spireGroup.add(crystalTip);
 
-    // Glowing Rotating 3D Energy Rings around the Tower
-    const ringsGroup = new THREE.Group();
-    ringsGroup.position.y = 26;
+    // Orbital Corona Halo around Crystal Apex
+    const haloGeo = new THREE.TorusGeometry(3.4, 0.08, 16, 32);
+    const haloMat = new THREE.MeshBasicMaterial({
+      color: textureStyle === 'solar-gold' ? 0xfbbf24 : 0x67e8f9
+    });
+    const halo = new THREE.Mesh(haloGeo, haloMat);
+    halo.position.y = 40;
+    halo.rotation.x = Math.PI / 2.3;
+    spireGroup.add(halo);
 
-    const ring1Geo = new THREE.TorusGeometry(6, 0.18, 16, 48);
+    // 2E. Rotating 3D Energy Rings around the Tower
+    const ringsGroup = new THREE.Group();
+    ringsGroup.position.y = 27;
+
+    const ring1Geo = new THREE.TorusGeometry(6.4, 0.2, 16, 48);
     const ring1Mat = new THREE.MeshStandardMaterial({
       color: 0xfbbf24,
       emissive: 0xf59e0b,
-      emissiveIntensity: 1.2,
+      emissiveIntensity: 1.25,
       roughness: 0.2,
     });
     const ring1 = new THREE.Mesh(ring1Geo, ring1Mat);
     ringsGroup.add(ring1);
 
-    const ring2Geo = new THREE.TorusGeometry(8.5, 0.16, 16, 48);
+    const ring2Geo = new THREE.TorusGeometry(9.0, 0.18, 16, 48);
     const ring2Mat = new THREE.MeshStandardMaterial({
       color: 0x38bdf8,
       emissive: 0x0284c7,
-      emissiveIntensity: 1.2,
+      emissiveIntensity: 1.25,
       roughness: 0.2,
     });
     const ring2 = new THREE.Mesh(ring2Geo, ring2Mat);
     ring2.rotation.x = 0.4;
     ringsGroup.add(ring2);
 
-    const ring3Geo = new THREE.TorusGeometry(11, 0.14, 16, 48);
+    const ring3Geo = new THREE.TorusGeometry(11.6, 0.16, 16, 48);
     const ring3Mat = new THREE.MeshStandardMaterial({
       color: 0x34d399,
       emissive: 0x059669,
-      emissiveIntensity: 1.0,
+      emissiveIntensity: 1.1,
       roughness: 0.2,
     });
     const ring3 = new THREE.Mesh(ring3Geo, ring3Mat);
@@ -438,13 +604,47 @@ export const Citadel3DWorld: React.FC = () => {
     scene.add(spireGroup);
 
     // ==========================================
-    // 3. PIONEER'S FAMILY BIO-DOME HABITAT (GEODESIC SOLAR TEXTURED)
+    // 3. PIONEER'S FAMILY BIO-DOME HABITAT (ARCHITECTURAL ECO-COMPLEX)
     // ==========================================
     const habitatGroup = new THREE.Group();
     habitatGroup.position.set(-16, 2, -10);
 
-    // Dome Glass Structure with Geodesic Triangular Lattice Texture
-    const domeGeo = new THREE.SphereGeometry(5.5, 24, 16, 0, Math.PI * 2, 0, Math.PI * 0.5);
+    // 3A. Heavy Structural Titanium Base Ring
+    const baseRingGeo = new THREE.CylinderGeometry(5.8, 6.2, 0.8, 24);
+    const baseRingMat = new THREE.MeshStandardMaterial({
+      map: titaniumSpireTex.map,
+      roughness: 0.35,
+      metalness: 0.85,
+      wireframe: textureStyle === 'hologram'
+    });
+    const baseRing = new THREE.Mesh(baseRingGeo, baseRingMat);
+    baseRing.position.y = 0.4;
+    baseRing.receiveShadow = true;
+    habitatGroup.add(baseRing);
+
+    // 3B. Pressurized Airlock Module
+    const airlockGeo = new THREE.BoxGeometry(1.6, 1.8, 2.6);
+    const airlockMat = new THREE.MeshStandardMaterial({
+      map: titaniumSpireTex.map,
+      roughness: 0.25,
+      metalness: 0.9,
+      wireframe: textureStyle === 'hologram'
+    });
+    const airlock = new THREE.Mesh(airlockGeo, airlockMat);
+    airlock.position.set(2.4, 0.9, 4.4);
+    airlock.rotation.y = -0.52;
+    airlock.castShadow = true;
+    habitatGroup.add(airlock);
+
+    const airlockDoor = new THREE.Mesh(
+      new THREE.BoxGeometry(0.9, 1.4, 0.1),
+      new THREE.MeshBasicMaterial({ color: textureStyle === 'solar-gold' ? 0xf59e0b : 0x34d399 })
+    );
+    airlockDoor.position.set(0, 0, 1.32);
+    airlock.add(airlockDoor);
+
+    // 3C. Geodesic Dome Glass Structure
+    const domeGeo = new THREE.SphereGeometry(5.4, 24, 16, 0, Math.PI * 2, 0, Math.PI * 0.5);
     const domeMat = new THREE.MeshStandardMaterial({
       map: domeGlassTex.map,
       color: textureStyle === 'solar-gold' ? 0xfde047 : 0x6ee7b7,
@@ -456,6 +656,7 @@ export const Citadel3DWorld: React.FC = () => {
       wireframe: textureStyle === 'hologram',
     });
     const dome = new THREE.Mesh(domeGeo, domeMat);
+    dome.position.y = 0.8;
     habitatGroup.add(dome);
 
     // Dome Hexagonal Lattice Wireframe
@@ -466,18 +667,55 @@ export const Citadel3DWorld: React.FC = () => {
       opacity: 0.7 
     });
     const domeWire = new THREE.Mesh(domeGeo, domeWireMat);
+    domeWire.position.y = 0.8;
     habitatGroup.add(domeWire);
 
-    // Internal Habitat Hearth Warm Light
-    const hearthLight = new THREE.PointLight(0xf59e0b, 2.5, 14);
-    hearthLight.position.set(0, 1.5, 0);
+    // 3D. Articulating Photovoltaic Solar Wings
+    const solarWingGeo = new THREE.BoxGeometry(3.6, 0.08, 1.6);
+    const solarWingMat = new THREE.MeshStandardMaterial({
+      color: 0x1e3a8a,
+      emissive: 0x1d4ed8,
+      emissiveIntensity: 0.35,
+      roughness: 0.15,
+      metalness: 0.9,
+      wireframe: textureStyle === 'hologram'
+    });
+    // Left Solar Wing
+    const leftWing = new THREE.Mesh(solarWingGeo, solarWingMat);
+    leftWing.position.set(-6.5, 2.5, 0);
+    leftWing.rotation.z = 0.25;
+    leftWing.rotation.x = -0.3;
+    leftWing.castShadow = true;
+    habitatGroup.add(leftWing);
+    // Right Solar Wing
+    const rightWing = new THREE.Mesh(solarWingGeo, solarWingMat);
+    rightWing.position.set(6.5, 2.5, 0);
+    rightWing.rotation.z = -0.25;
+    rightWing.rotation.x = -0.3;
+    rightWing.castShadow = true;
+    habitatGroup.add(rightWing);
+
+    // 3E. Internal Habitat Hearth Warm Light & Life-Support Column
+    const hearthLight = new THREE.PointLight(0xf59e0b, 2.8, 15);
+    hearthLight.position.set(0, 2.2, 0);
     habitatGroup.add(hearthLight);
 
+    // Central Life-Support Column
+    const scrubberGeo = new THREE.CylinderGeometry(0.35, 0.45, 3.8, 12);
+    const scrubberMat = new THREE.MeshStandardMaterial({
+      map: titaniumSpireTex.map,
+      roughness: 0.3,
+      metalness: 0.85
+    });
+    const scrubber = new THREE.Mesh(scrubberGeo, scrubberMat);
+    scrubber.position.y = 1.9;
+    habitatGroup.add(scrubber);
+
     // Hydroponic Tree Inside Dome
-    const treeTrunkGeo = new THREE.CylinderGeometry(0.3, 0.4, 2.5, 8);
+    const treeTrunkGeo = new THREE.CylinderGeometry(0.25, 0.35, 2.6, 8);
     const treeTrunkMat = new THREE.MeshStandardMaterial({ color: 0x78350f });
     const trunk = new THREE.Mesh(treeTrunkGeo, treeTrunkMat);
-    trunk.position.y = 1.25;
+    trunk.position.set(-1.8, 1.3, -1.2);
     habitatGroup.add(trunk);
 
     const foliageGeo = new THREE.SphereGeometry(1.6, 12, 12);
@@ -486,45 +724,181 @@ export const Citadel3DWorld: React.FC = () => {
       roughness: 0.6 
     });
     const foliage = new THREE.Mesh(foliageGeo, foliageMat);
-    foliage.position.y = 3;
+    foliage.position.set(-1.8, 3.0, -1.2);
     habitatGroup.add(foliage);
 
     scene.add(habitatGroup);
 
     // ==========================================
-    // 4. SECONDARY SPIRES & STAKING BIO-VAULTS (CRYSTALLINE HASH TEXTURED)
+    // 4. SECONDARY SPIRES & INFRASTRUCTURE VAULTS
     // ==========================================
-    const spires = [
-      { x: 18, z: -8, color: 0x60a5fa, height: 16, name: 'Staking' },
-      { x: -12, z: 14, color: 0xa78bfa, height: 14, name: 'ColdVault' },
-      { x: 14, z: 12, color: 0x34d399, height: 18, name: 'Launchpad' },
-    ];
-    spires.forEach((sp) => {
-      const sGeo = new THREE.ConeGeometry(2, sp.height, 8);
-      const sMat = new THREE.MeshStandardMaterial({
+    // 4A. LIQUID STAKING VAULT (x: 18, z: -8)
+    const stakingGroup = new THREE.Group();
+    stakingGroup.position.set(18, 0, -8);
+
+    const stakPedestal = new THREE.Mesh(
+      new THREE.CylinderGeometry(3.2, 3.8, 1.6, 6),
+      new THREE.MeshStandardMaterial({ map: titaniumSpireTex.map, roughness: 0.3, metalness: 0.9 })
+    );
+    stakPedestal.position.y = 0.8;
+    stakPedestal.receiveShadow = true;
+    stakingGroup.add(stakPedestal);
+
+    // Twin Server Pillars
+    const stakPillarMat = new THREE.MeshStandardMaterial({
+      map: crystalVaultTex.map,
+      emissiveMap: crystalVaultTex.emissiveMap,
+      color: 0x60a5fa,
+      emissive: 0x3b82f6,
+      emissiveIntensity: 0.65,
+      roughness: 0.15,
+      metalness: 0.85,
+      wireframe: textureStyle === 'hologram',
+    });
+    const p1 = new THREE.Mesh(new THREE.BoxGeometry(1.2, 16, 1.2), stakPillarMat);
+    p1.position.set(-1.2, 8.8, 0);
+    p1.castShadow = true;
+    stakingGroup.add(p1);
+
+    const p2 = new THREE.Mesh(new THREE.BoxGeometry(1.2, 16, 1.2), stakPillarMat);
+    p2.position.set(1.2, 8.8, 0);
+    p2.castShadow = true;
+    stakingGroup.add(p2);
+
+    // Floating Staking Core Crystal suspended between pillars
+    const stakCore = new THREE.Mesh(
+      new THREE.OctahedronGeometry(1.8, 0),
+      new THREE.MeshStandardMaterial({
+        color: 0x38bdf8,
+        emissive: 0x0284c7,
+        emissiveIntensity: 1.0,
+        roughness: 0.05,
+        metalness: 0.95
+      })
+    );
+    stakCore.position.set(0, 9.5, 0);
+    stakingGroup.add(stakCore);
+
+    // Quantum Accumulator Ring atop Staking Pillars
+    const accumRing = new THREE.Mesh(
+      new THREE.TorusGeometry(2.4, 0.15, 16, 32),
+      new THREE.MeshStandardMaterial({ color: 0x93c5fd, emissive: 0x3b82f6, emissiveIntensity: 0.9 })
+    );
+    accumRing.position.y = 17;
+    accumRing.rotation.x = Math.PI / 2;
+    stakingGroup.add(accumRing);
+
+    scene.add(stakingGroup);
+
+    // 4B. COLD STORAGE CRYPT MONOLITH (x: -12, z: 14)
+    const cryptGroup = new THREE.Group();
+    cryptGroup.position.set(-12, 0, 14);
+
+    const cryptBase = new THREE.Mesh(
+      new THREE.CylinderGeometry(2.8, 3.4, 1.4, 8),
+      new THREE.MeshStandardMaterial({ map: titaniumSpireTex.map, roughness: 0.3, metalness: 0.9 })
+    );
+    cryptBase.position.y = 0.7;
+    cryptGroup.add(cryptBase);
+
+    // Levitating Crypt Obelisk
+    const cryptObelisk = new THREE.Mesh(
+      new THREE.ConeGeometry(2.2, 14, 6),
+      new THREE.MeshStandardMaterial({
         map: crystalVaultTex.map,
         emissiveMap: crystalVaultTex.emissiveMap,
-        color: sp.color,
-        emissive: sp.color,
-        emissiveIntensity: 0.7,
-        roughness: 0.15,
-        metalness: 0.85,
-        wireframe: textureStyle === 'hologram',
-      });
-      const sMesh = new THREE.Mesh(sGeo, sMat);
-      sMesh.position.set(sp.x, sp.height / 2, sp.z);
-      sMesh.castShadow = true;
-      scene.add(sMesh);
+        color: 0xa78bfa,
+        emissive: 0x8b5cf6,
+        emissiveIntensity: 0.75,
+        roughness: 0.12,
+        metalness: 0.9,
+        wireframe: textureStyle === 'hologram'
+      })
+    );
+    cryptObelisk.position.y = 9.2;
+    cryptObelisk.castShadow = true;
+    cryptGroup.add(cryptObelisk);
+    scene.add(cryptGroup);
+
+    // 4C. LAUNCHPAD & AEROSPACE TERMINAL (x: 14, z: 12)
+    const launchpadGroup = new THREE.Group();
+    launchpadGroup.position.set(14, 0, 12);
+
+    const padPlatform = new THREE.Mesh(
+      new THREE.CylinderGeometry(6.4, 7.2, 1.4, 8),
+      new THREE.MeshStandardMaterial({
+        map: hexTilesTex.map,
+        bumpMap: hexTilesTex.bumpMap,
+        bumpScale: 0.1,
+        roughness: 0.5,
+        metalness: 0.7,
+        wireframe: textureStyle === 'hologram'
+      })
+    );
+    padPlatform.position.y = 0.7;
+    padPlatform.receiveShadow = true;
+    launchpadGroup.add(padPlatform);
+
+    // Landing Ring Target Markings (PolygonOffset to avoid z-fighting)
+    const targetRing = new THREE.Mesh(
+      new THREE.RingGeometry(3.2, 3.6, 32),
+      new THREE.MeshBasicMaterial({
+        color: textureStyle === 'solar-gold' ? 0xf59e0b : 0x34d399,
+        side: THREE.DoubleSide,
+        polygonOffset: true,
+        polygonOffsetFactor: -1,
+        polygonOffsetUnits: -1
+      })
+    );
+    targetRing.rotation.x = -Math.PI / 2;
+    targetRing.position.y = 1.42;
+    launchpadGroup.add(targetRing);
+
+    // 8 Instanced Runway Approach Lights on Launchpad Perimeter
+    const beaconGeo = new THREE.CylinderGeometry(0.15, 0.2, 0.5, 8);
+    const beaconMat = new THREE.MeshBasicMaterial({
+      color: textureStyle === 'solar-gold' ? 0xfbbf24 : 0x38bdf8
     });
+    const padBeaconInstanced = new THREE.InstancedMesh(beaconGeo, beaconMat, 8);
+    for (let i = 0; i < 8; i++) {
+      const bAngle = (i / 8) * Math.PI * 2;
+      _dummyPosition.set(Math.cos(bAngle) * 5.2, 1.5, Math.sin(bAngle) * 5.2);
+      _dummyQuaternion.identity();
+      _dummyMatrix.compose(_dummyPosition, _dummyQuaternion, _dummyScale);
+      padBeaconInstanced.setMatrixAt(i, _dummyMatrix);
+    }
+    padBeaconInstanced.instanceMatrix.needsUpdate = true;
+    padBeaconInstanced.computeBoundingSphere();
+    launchpadGroup.add(padBeaconInstanced);
+
+    // Launch Gantry Crane Tower
+    const gantry = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.8, 1.2, 14, 8),
+      new THREE.MeshStandardMaterial({ map: titaniumSpireTex.map, roughness: 0.3, metalness: 0.9 })
+    );
+    gantry.position.set(4.5, 7, 0);
+    gantry.castShadow = true;
+    launchpadGroup.add(gantry);
+
+    // Articulated Docking Boom Arm
+    const boom = new THREE.Mesh(
+      new THREE.BoxGeometry(4.2, 0.4, 0.4),
+      new THREE.MeshStandardMaterial({ color: 0x475569, metalness: 0.85, roughness: 0.3 })
+    );
+    boom.position.set(2.4, 13.5, 0);
+    launchpadGroup.add(boom);
+
+    scene.add(launchpadGroup);
 
     // ==========================================
-    // 5. 3D HOVER SHUTTLES (AEROSPACE ALLOY TEXTURED)
+    // 5. 3D AEROSPACE HOVER SHUTTLES (AERODYNAMIC OPTIMIZED DESIGN)
     // ==========================================
     const shuttles: THREE.Group[] = [];
     for (let i = 0; i < 3; i++) {
       const shuttle = new THREE.Group();
-      
-      const bodyGeo = new THREE.ConeGeometry(0.6, 2.8, 6);
+
+      // Fuselage Main Body
+      const bodyGeo = new THREE.ConeGeometry(0.7, 3.2, 8);
       const bodyMat = new THREE.MeshStandardMaterial({ 
         map: titaniumSpireTex.map,
         bumpMap: titaniumSpireTex.bumpMap,
@@ -536,14 +910,40 @@ export const Citadel3DWorld: React.FC = () => {
       });
       const body = new THREE.Mesh(bodyGeo, bodyMat);
       body.rotation.x = Math.PI / 2;
+      body.castShadow = true;
       shuttle.add(body);
 
-      // Plasma Engine Glow
-      const glowGeo = new THREE.SphereGeometry(0.35, 8, 8);
-      const glowMat = new THREE.MeshBasicMaterial({ color: i === 1 ? 0xfbbf24 : 0x38bdf8 });
-      const glow = new THREE.Mesh(glowGeo, glowMat);
-      glow.position.z = -1.4;
-      shuttle.add(glow);
+      // Cockpit Canopy Glass
+      const cockpitGeo = new THREE.BoxGeometry(0.5, 0.3, 1.1);
+      const cockpitMat = new THREE.MeshBasicMaterial({
+        color: i === 1 ? 0xfbbf24 : 0x38bdf8
+      });
+      const cockpit = new THREE.Mesh(cockpitGeo, cockpitMat);
+      cockpit.position.set(0, 0.3, 0.4);
+      shuttle.add(cockpit);
+
+      // Swept Delta Wings
+      const wingGeo = new THREE.BoxGeometry(3.4, 0.08, 1.4);
+      const wingMat = new THREE.MeshStandardMaterial({
+        color: 0x334155,
+        roughness: 0.3,
+        metalness: 0.85
+      });
+      const wings = new THREE.Mesh(wingGeo, wingMat);
+      wings.position.set(0, -0.05, -0.4);
+      shuttle.add(wings);
+
+      // Dual Twin Plasma Engine Nacelles
+      const nacelleMat = new THREE.MeshBasicMaterial({ color: i === 1 ? 0xfbbf24 : 0x38bdf8 });
+      const engL = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.22, 0.6, 8), nacelleMat);
+      engL.rotation.x = Math.PI / 2;
+      engL.position.set(-0.6, -0.1, -1.6);
+      shuttle.add(engL);
+
+      const engR = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.22, 0.6, 8), nacelleMat);
+      engR.rotation.x = Math.PI / 2;
+      engR.position.set(0.6, -0.1, -1.6);
+      shuttle.add(engR);
 
       shuttle.position.set(
         Math.cos(i * 2.1) * 22,
@@ -727,7 +1127,7 @@ export const Citadel3DWorld: React.FC = () => {
       }
       posAttr.needsUpdate = true;
 
-      // 3. Move Flying Shuttles
+      // 3. Move Flying Shuttles with Aerodynamic Banking
       shuttlesRef.current.forEach((shuttle, idx) => {
         const speed = 0.35 + idx * 0.1;
         const angle = elapsed * speed + idx * 2.1;
@@ -736,20 +1136,22 @@ export const Citadel3DWorld: React.FC = () => {
         shuttle.position.z = Math.sin(angle) * radius;
         shuttle.position.y = 14 + idx * 4 + Math.sin(elapsed * 2 + idx) * 1.5;
         shuttle.rotation.y = -angle + Math.PI / 2;
+        // Aerodynamic bank angle into the curve
+        shuttle.rotation.z = Math.sin(elapsed * 1.8 + idx) * 0.12 - 0.08;
       });
 
-      // 4. Move Pioneer towards current target waypoint
+      // 4. Move Pioneer towards current target waypoint (Zero-GC)
       if (pioneerGroupRef.current) {
         const p = pioneerGroupRef.current;
         const target = targetPosRef.current;
-        const dir = new THREE.Vector3().subVectors(target, p.position);
-        const dist = dir.length();
+        _tmpDir.subVectors(target, p.position);
+        const dist = _tmpDir.length();
 
         if (dist > 0.3) {
-          dir.normalize();
-          p.position.addScaledVector(dir, 0.04);
+          _tmpDir.normalize();
+          p.position.addScaledVector(_tmpDir, 0.04);
           // Face direction of travel
-          const angle = Math.atan2(dir.x, dir.z);
+          const angle = Math.atan2(_tmpDir.x, _tmpDir.z);
           p.rotation.y = angle;
 
           // Leg walking oscillation
@@ -777,27 +1179,32 @@ export const Citadel3DWorld: React.FC = () => {
         droneGroup.position.y = 2.2 + Math.sin(elapsed * 3) * 0.2;
       }
 
-      // 5. Camera Positioning based on Camera Mode
+      // 5. Camera Positioning based on Camera Mode (Zero-GC via cameraModeRef)
       const cam = cameraRef.current;
       if (cam && pioneerGroupRef.current) {
         const pPos = pioneerGroupRef.current.position;
+        const currentMode = cameraModeRef.current;
 
-        if (cameraMode === 'follow') {
+        if (currentMode === 'follow') {
           // 3rd Person Follow Camera behind Pioneer
-          const followOffset = new THREE.Vector3(
-            -Math.sin(pioneerGroupRef.current.rotation.y) * 9,
+          const angle = pioneerGroupRef.current.rotation.y;
+          _camFollowOffset.set(
+            -Math.sin(angle) * 9,
             4.5,
-            -Math.cos(pioneerGroupRef.current.rotation.y) * 9
+            -Math.cos(angle) * 9
           );
-          cam.position.lerp(new THREE.Vector3().addVectors(pPos, followOffset), 0.05);
+          _tmpV1.addVectors(pPos, _camFollowOffset);
+          cam.position.lerp(_tmpV1, 0.05);
           cam.lookAt(pPos.x, pPos.y + 1.8, pPos.z);
-        } else if (cameraMode === 'top') {
+        } else if (currentMode === 'top') {
           // Bird's Eye View of Citadel
-          cam.position.lerp(new THREE.Vector3(0, 55, 10), 0.04);
+          _tmpV1.set(0, 55, 10);
+          cam.position.lerp(_tmpV1, 0.04);
           cam.lookAt(0, 8, 0);
-        } else if (cameraMode === 'habitat') {
+        } else if (currentMode === 'habitat') {
           // Focus on Family Bio-Dome
-          cam.position.lerp(new THREE.Vector3(-16, 8, 2), 0.04);
+          _tmpV1.set(-16, 8, 2);
+          cam.position.lerp(_tmpV1, 0.04);
           cam.lookAt(-16, 3, -10);
         } else {
           // Free Orbit Camera
@@ -825,8 +1232,8 @@ export const Citadel3DWorld: React.FC = () => {
 
     const handleResize = () => {
       if (!containerRef.current || !rendererRef.current || !cameraRef.current) return;
-      const w = containerRef.current.clientWidth;
-      const h = containerRef.current.clientHeight;
+      const w = Math.max(containerRef.current.clientWidth || 0, 320);
+      const h = Math.max(containerRef.current.clientHeight || 0, 240);
       cameraRef.current.aspect = w / h;
       cameraRef.current.updateProjectionMatrix();
       rendererRef.current.setSize(w, h);
@@ -843,9 +1250,23 @@ export const Citadel3DWorld: React.FC = () => {
       domEl.removeEventListener('touchstart', onTouchStart);
       window.removeEventListener('touchmove', onTouchMove);
       window.removeEventListener('touchend', onTouchEnd);
+      if (domEl.parentElement) {
+        domEl.parentElement.removeChild(domEl);
+      }
+      scene.traverse((obj) => {
+        if ((obj as THREE.Mesh).isMesh) {
+          const mesh = obj as THREE.Mesh;
+          if (mesh.geometry) mesh.geometry.dispose();
+          if (Array.isArray(mesh.material)) {
+            mesh.material.forEach((m) => m.dispose());
+          } else if (mesh.material) {
+            mesh.material.dispose();
+          }
+        }
+      });
       renderer.dispose();
     };
-  }, [cameraMode, textureStyle]);
+  }, [textureStyle]);
 
   // Adjust Sky Lighting & Sky Dome Tint based on timeOfDay
   useEffect(() => {
