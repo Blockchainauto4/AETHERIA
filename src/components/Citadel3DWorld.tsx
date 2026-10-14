@@ -1,7 +1,18 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { useExchange } from '../context/ExchangeContext';
 import { PioneerState } from '../types/pioneer';
+import { 
+  createAlienTerrainTextures,
+  createCyberHexTilesTextures,
+  createTitaniumSpireTextures,
+  createQuantumWaterTextures,
+  createBioDomeGlassTextures,
+  createExoSuitTextures,
+  createCrystalVaultTextures,
+  createSkyDomeTexture
+} from '../utils/proceduralTextures';
 import { 
   Heart, 
   Zap, 
@@ -22,7 +33,9 @@ import {
   Layers,
   ChevronRight,
   TrendingUp,
-  RotateCcw
+  RotateCcw,
+  Palette,
+  Check
 } from 'lucide-react';
 
 export const Citadel3DWorld: React.FC = () => {
@@ -32,6 +45,8 @@ export const Citadel3DWorld: React.FC = () => {
   // Camera & Visual Modes
   const [cameraMode, setCameraMode] = useState<'orbit' | 'follow' | 'top' | 'habitat'>('follow');
   const [timeOfDay, setTimeOfDay] = useState<'day' | 'sunset' | 'night'>('sunset');
+  const [textureStyle, setTextureStyle] = useState<'realistic-pbr' | 'hologram' | 'solar-gold'>('realistic-pbr');
+  const [showTextureMenu, setShowTextureMenu] = useState<boolean>(false);
   const [isChatOpen, setIsChatOpen] = useState<boolean>(false);
   const [chatInput, setChatInput] = useState<string>('');
   const [sendingChat, setSendingChat] = useState<boolean>(false);
@@ -85,6 +100,8 @@ export const Citadel3DWorld: React.FC = () => {
   const energyRingsRef = useRef<THREE.Group | null>(null);
   const shuttlesRef = useRef<THREE.Group[]>([]);
   const lightsRef = useRef<{ dirLight: THREE.DirectionalLight; ambientLight: THREE.AmbientLight; skyColor: THREE.Color } | null>(null);
+  const skyMeshRef = useRef<THREE.Mesh | null>(null);
+  const waterTexturesRef = useRef<{ map: THREE.CanvasTexture; bumpMap: THREE.CanvasTexture } | null>(null);
 
   // Pioneer Waypoints on the 3D Terrain
   const waypoints = [
@@ -213,9 +230,40 @@ export const Citadel3DWorld: React.FC = () => {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.15;
     container.innerHTML = '';
     container.appendChild(renderer.domElement);
     rendererRef.current = renderer;
+
+    // RoomEnvironment for realistic studio reflections on metals & glass
+    const pmremGenerator = new THREE.PMREMGenerator(renderer);
+    scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
+    pmremGenerator.dispose();
+
+    // Procedural 3D Textures Generation with Anisotropic Filtering
+    const maxAniso = renderer.capabilities.getMaxAnisotropy();
+    const terrainTex = createAlienTerrainTextures(maxAniso);
+    const hexTilesTex = createCyberHexTilesTextures(maxAniso);
+    const titaniumSpireTex = createTitaniumSpireTextures(maxAniso);
+    const waterTex = createQuantumWaterTextures(maxAniso);
+    const domeGlassTex = createBioDomeGlassTextures(maxAniso);
+    const exoSuitTex = createExoSuitTextures(maxAniso);
+    const crystalVaultTex = createCrystalVaultTextures(maxAniso);
+    const skyDomeTex = createSkyDomeTexture();
+    waterTexturesRef.current = waterTex;
+
+    // Celestial Alien Sky Dome with Stars, Nebula & Ringed Planet
+    const skyGeo = new THREE.SphereGeometry(350, 32, 24);
+    const skyMat = new THREE.MeshBasicMaterial({
+      map: skyDomeTex,
+      side: THREE.BackSide,
+      fog: false,
+    });
+    const skyMesh = new THREE.Mesh(skyGeo, skyMat);
+    scene.add(skyMesh);
+    skyMeshRef.current = skyMesh;
 
     // Lights
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
@@ -235,42 +283,57 @@ export const Citadel3DWorld: React.FC = () => {
     };
 
     // ==========================================
-    // 1. TERRAIN & TERRACED BIO-ISLANDS
+    // 1. TERRAIN & TERRACED BIO-ISLANDS (PBR TEXTURED)
     // ==========================================
     const terrainGroup = new THREE.Group();
 
-    // Central Main Island Platform
+    // Central Main Island Platform with Organic Moss & Lichen PBR Texture
     const islandGeo = new THREE.CylinderGeometry(28, 34, 4, 32);
     const islandMat = new THREE.MeshStandardMaterial({
-      color: 0x064e3b,
-      roughness: 0.8,
-      metalness: 0.1,
+      map: terrainTex.map,
+      bumpMap: terrainTex.bumpMap,
+      bumpScale: 0.2,
+      roughnessMap: terrainTex.roughnessMap,
+      roughness: 0.78,
+      metalness: 0.15,
+      wireframe: textureStyle === 'hologram',
+      color: textureStyle === 'solar-gold' ? 0xd97706 : (textureStyle === 'hologram' ? 0x06b6d4 : 0xffffff),
     });
     const mainIsland = new THREE.Mesh(islandGeo, islandMat);
     mainIsland.position.y = -2;
     mainIsland.receiveShadow = true;
     terrainGroup.add(mainIsland);
 
-    // Stepped Upper Terrace
+    // Stepped Upper Terrace with Cybernetic Hex-Pavers Texture
     const terraceGeo = new THREE.CylinderGeometry(18, 22, 3, 24);
     const terraceMat = new THREE.MeshStandardMaterial({
-      color: 0x047857,
-      roughness: 0.7,
-      metalness: 0.15,
+      map: hexTilesTex.map,
+      bumpMap: hexTilesTex.bumpMap,
+      bumpScale: 0.12,
+      emissiveMap: hexTilesTex.emissiveMap,
+      emissive: new THREE.Color(textureStyle === 'solar-gold' ? 0xf59e0b : (textureStyle === 'hologram' ? 0x06b6d4 : 0x34d399)),
+      emissiveIntensity: 0.75,
+      roughness: 0.5,
+      metalness: 0.65,
+      wireframe: textureStyle === 'hologram',
     });
     const upperTerrace = new THREE.Mesh(terraceGeo, terraceMat);
     upperTerrace.position.y = 0.5;
     upperTerrace.receiveShadow = true;
     terrainGroup.add(upperTerrace);
 
-    // Glowing Liquidity River Path (Curved Water Flow)
+    // Glowing Liquidity River Path with Animated Wave Caustics Texture
     const waterGeo = new THREE.TorusGeometry(12, 1.8, 16, 50, Math.PI * 1.2);
     const waterMat = new THREE.MeshStandardMaterial({
-      color: 0x06b6d4,
-      emissive: 0x0891b2,
-      emissiveIntensity: 0.6,
-      roughness: 0.1,
-      metalness: 0.9,
+      map: waterTex.map,
+      bumpMap: waterTex.bumpMap,
+      bumpScale: 0.22,
+      color: textureStyle === 'solar-gold' ? 0xfbbf24 : 0xffffff,
+      emissive: new THREE.Color(textureStyle === 'solar-gold' ? 0xd97706 : 0x0284c7),
+      emissiveIntensity: 0.55,
+      roughness: 0.08,
+      metalness: 0.85,
+      wireframe: textureStyle === 'hologram',
     });
     const waterMesh = new THREE.Mesh(waterGeo, waterMat);
     waterMesh.rotation.x = Math.PI / 2;
@@ -288,7 +351,7 @@ export const Citadel3DWorld: React.FC = () => {
     const wfGeo = new THREE.BufferGeometry();
     wfGeo.setAttribute('position', new THREE.BufferAttribute(wfPositions, 3));
     const wfMat = new THREE.PointsMaterial({
-      color: 0x67e8f9,
+      color: textureStyle === 'solar-gold' ? 0xfbbf24 : 0x67e8f9,
       size: 0.35,
       transparent: true,
       opacity: 0.85,
@@ -300,16 +363,20 @@ export const Citadel3DWorld: React.FC = () => {
     scene.add(terrainGroup);
 
     // ==========================================
-    // 2. MONUMENTAL CENTRAL MATCHING SPIRE
+    // 2. MONUMENTAL CENTRAL SPIRE (BRUSHED TITANIUM TEXTURED)
     // ==========================================
     const spireGroup = new THREE.Group();
 
-    // Tower Body
-    const towerGeo = new THREE.CylinderGeometry(1.2, 3.5, 36, 16);
+    // Tower Body with Precision Bolted Alloy Panels & Telemetry Decals
+    const towerGeo = new THREE.CylinderGeometry(1.2, 3.5, 36, 24);
     const towerMat = new THREE.MeshStandardMaterial({
-      color: 0xf1f5f9,
-      roughness: 0.2,
-      metalness: 0.85,
+      map: titaniumSpireTex.map,
+      bumpMap: titaniumSpireTex.bumpMap,
+      bumpScale: 0.08,
+      roughnessMap: titaniumSpireTex.roughnessMap,
+      roughness: 0.22,
+      metalness: 0.92,
+      wireframe: textureStyle === 'hologram',
     });
     const tower = new THREE.Mesh(towerGeo, towerMat);
     tower.position.y = 18;
@@ -319,12 +386,12 @@ export const Citadel3DWorld: React.FC = () => {
     // Crystal Spire Tip
     const crystalGeo = new THREE.OctahedronGeometry(2.5, 2);
     const crystalMat = new THREE.MeshStandardMaterial({
-      color: 0x34d399,
-      emissive: 0x10b981,
-      emissiveIntensity: 0.9,
-      roughness: 0.1,
+      color: textureStyle === 'solar-gold' ? 0xfbbf24 : 0x34d399,
+      emissive: textureStyle === 'solar-gold' ? 0xd97706 : 0x10b981,
+      emissiveIntensity: 0.95,
+      roughness: 0.08,
       metalness: 0.95,
-      wireframe: false
+      wireframe: textureStyle === 'hologram'
     });
     const crystalTip = new THREE.Mesh(crystalGeo, crystalMat);
     crystalTip.position.y = 37;
@@ -371,25 +438,33 @@ export const Citadel3DWorld: React.FC = () => {
     scene.add(spireGroup);
 
     // ==========================================
-    // 3. PIONEER'S FAMILY BIO-DOME HABITAT
+    // 3. PIONEER'S FAMILY BIO-DOME HABITAT (GEODESIC SOLAR TEXTURED)
     // ==========================================
     const habitatGroup = new THREE.Group();
     habitatGroup.position.set(-16, 2, -10);
 
-    // Dome Glass Structure
+    // Dome Glass Structure with Geodesic Triangular Lattice Texture
     const domeGeo = new THREE.SphereGeometry(5.5, 24, 16, 0, Math.PI * 2, 0, Math.PI * 0.5);
     const domeMat = new THREE.MeshStandardMaterial({
-      color: 0x34d399,
-      roughness: 0.1,
-      metalness: 0.3,
+      map: domeGlassTex.map,
+      color: textureStyle === 'solar-gold' ? 0xfde047 : 0x6ee7b7,
+      roughness: 0.08,
+      metalness: 0.4,
       transparent: true,
-      opacity: 0.45,
+      opacity: 0.65,
+      depthWrite: false,
+      wireframe: textureStyle === 'hologram',
     });
     const dome = new THREE.Mesh(domeGeo, domeMat);
     habitatGroup.add(dome);
 
     // Dome Hexagonal Lattice Wireframe
-    const domeWireMat = new THREE.MeshBasicMaterial({ color: 0x6ee7b7, wireframe: true, transparent: true, opacity: 0.6 });
+    const domeWireMat = new THREE.MeshBasicMaterial({ 
+      color: textureStyle === 'solar-gold' ? 0xf59e0b : 0x34d399, 
+      wireframe: true, 
+      transparent: true, 
+      opacity: 0.7 
+    });
     const domeWire = new THREE.Mesh(domeGeo, domeWireMat);
     habitatGroup.add(domeWire);
 
@@ -406,7 +481,10 @@ export const Citadel3DWorld: React.FC = () => {
     habitatGroup.add(trunk);
 
     const foliageGeo = new THREE.SphereGeometry(1.6, 12, 12);
-    const foliageMat = new THREE.MeshStandardMaterial({ color: 0x22c55e, roughness: 0.6 });
+    const foliageMat = new THREE.MeshStandardMaterial({ 
+      color: textureStyle === 'solar-gold' ? 0xca8a04 : 0x22c55e, 
+      roughness: 0.6 
+    });
     const foliage = new THREE.Mesh(foliageGeo, foliageMat);
     foliage.position.y = 3;
     habitatGroup.add(foliage);
@@ -414,7 +492,7 @@ export const Citadel3DWorld: React.FC = () => {
     scene.add(habitatGroup);
 
     // ==========================================
-    // 4. SECONDARY SPIRES & STAKING BIO-VAULTS
+    // 4. SECONDARY SPIRES & STAKING BIO-VAULTS (CRYSTALLINE HASH TEXTURED)
     // ==========================================
     const spires = [
       { x: 18, z: -8, color: 0x60a5fa, height: 16, name: 'Staking' },
@@ -422,13 +500,16 @@ export const Citadel3DWorld: React.FC = () => {
       { x: 14, z: 12, color: 0x34d399, height: 18, name: 'Launchpad' },
     ];
     spires.forEach((sp) => {
-      const sGeo = new THREE.ConeGeometry(2, sp.height, 6);
+      const sGeo = new THREE.ConeGeometry(2, sp.height, 8);
       const sMat = new THREE.MeshStandardMaterial({
+        map: crystalVaultTex.map,
+        emissiveMap: crystalVaultTex.emissiveMap,
         color: sp.color,
         emissive: sp.color,
-        emissiveIntensity: 0.4,
-        roughness: 0.2,
-        metalness: 0.8
+        emissiveIntensity: 0.7,
+        roughness: 0.15,
+        metalness: 0.85,
+        wireframe: textureStyle === 'hologram',
       });
       const sMesh = new THREE.Mesh(sGeo, sMat);
       sMesh.position.set(sp.x, sp.height / 2, sp.z);
@@ -437,14 +518,22 @@ export const Citadel3DWorld: React.FC = () => {
     });
 
     // ==========================================
-    // 5. 3D HOVER SHUTTLES (FLYING IN THE SKY)
+    // 5. 3D HOVER SHUTTLES (AEROSPACE ALLOY TEXTURED)
     // ==========================================
     const shuttles: THREE.Group[] = [];
     for (let i = 0; i < 3; i++) {
       const shuttle = new THREE.Group();
       
       const bodyGeo = new THREE.ConeGeometry(0.6, 2.8, 6);
-      const bodyMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.2, metalness: 0.8 });
+      const bodyMat = new THREE.MeshStandardMaterial({ 
+        map: titaniumSpireTex.map,
+        bumpMap: titaniumSpireTex.bumpMap,
+        bumpScale: 0.08,
+        color: 0xf8fafc, 
+        roughness: 0.2, 
+        metalness: 0.88,
+        wireframe: textureStyle === 'hologram',
+      });
       const body = new THREE.Mesh(bodyGeo, bodyMat);
       body.rotation.x = Math.PI / 2;
       shuttle.add(body);
@@ -468,13 +557,20 @@ export const Citadel3DWorld: React.FC = () => {
     shuttlesRef.current = shuttles;
 
     // ==========================================
-    // 6. THE LIVING PIONEER CHARACTER (KAELEN)
+    // 6. THE LIVING PIONEER CHARACTER (KAELEN - CARBON WEAVE EXOSUIT)
     // ==========================================
     const pioneerGroup = new THREE.Group();
 
-    // Torso (Exo-Suit Armor)
+    // Torso (Exo-Suit Armor with Carbon Fiber Weave & Tactical Badges)
     const torsoGeo = new THREE.BoxGeometry(0.7, 1.0, 0.45);
-    const suitMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.4, metalness: 0.6 });
+    const suitMat = new THREE.MeshStandardMaterial({ 
+      map: exoSuitTex.map,
+      bumpMap: exoSuitTex.bumpMap,
+      bumpScale: 0.08,
+      roughness: 0.45, 
+      metalness: 0.55,
+      wireframe: textureStyle === 'hologram',
+    });
     const torso = new THREE.Mesh(torsoGeo, suitMat);
     torso.position.y = 1.3;
     torso.castShadow = true;
@@ -482,14 +578,18 @@ export const Citadel3DWorld: React.FC = () => {
 
     // Armor Chestplate Accent
     const chestGeo = new THREE.BoxGeometry(0.5, 0.4, 0.15);
-    const chestMat = new THREE.MeshStandardMaterial({ color: 0x10b981, emissive: 0x059669, emissiveIntensity: 0.5 });
+    const chestMat = new THREE.MeshStandardMaterial({ color: 0x10b981, emissive: 0x059669, emissiveIntensity: 0.6 });
     const chest = new THREE.Mesh(chestGeo, chestMat);
     chest.position.set(0, 1.4, 0.22);
     pioneerGroup.add(chest);
 
     // Helmet & Glowing Biometric Visor
     const headGeo = new THREE.SphereGeometry(0.35, 16, 16);
-    const helmetMat = new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.3, metalness: 0.7 });
+    const helmetMat = new THREE.MeshStandardMaterial({ 
+      map: exoSuitTex.map,
+      roughness: 0.3, 
+      metalness: 0.7 
+    });
     const head = new THREE.Mesh(headGeo, helmetMat);
     head.position.y = 2.05;
     head.castShadow = true;
@@ -501,7 +601,7 @@ export const Citadel3DWorld: React.FC = () => {
     visor.position.set(0, 2.05, 0.25);
     pioneerGroup.add(visor);
 
-    // Legs
+    // Legs with Carbon Weave
     const legGeo = new THREE.BoxGeometry(0.24, 0.8, 0.25);
     const leftLeg = new THREE.Mesh(legGeo, suitMat);
     leftLeg.position.set(-0.2, 0.5, 0);
@@ -516,7 +616,11 @@ export const Citadel3DWorld: React.FC = () => {
     droneGroup.position.set(0.8, 2.2, 0);
 
     const droneGeo = new THREE.SphereGeometry(0.2, 12, 12);
-    const droneMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.2, metalness: 0.9 });
+    const droneMat = new THREE.MeshStandardMaterial({ 
+      map: titaniumSpireTex.map,
+      roughness: 0.2, 
+      metalness: 0.9 
+    });
     const drone = new THREE.Mesh(droneGeo, droneMat);
     droneGroup.add(drone);
 
@@ -705,6 +809,15 @@ export const Citadel3DWorld: React.FC = () => {
         }
       }
 
+      // 6. Dynamic Procedural Texture Animations (Water Flow & Sky Rotation)
+      if (skyMeshRef.current) {
+        skyMeshRef.current.rotation.y = elapsed * 0.003;
+      }
+      if (waterTexturesRef.current) {
+        waterTexturesRef.current.map.offset.x = (elapsed * 0.04) % 1;
+        waterTexturesRef.current.bumpMap.offset.x = (elapsed * 0.04) % 1;
+      }
+
       renderer.render(scene, camera);
     };
 
@@ -732,34 +845,43 @@ export const Citadel3DWorld: React.FC = () => {
       window.removeEventListener('touchend', onTouchEnd);
       renderer.dispose();
     };
-  }, [cameraMode]);
+  }, [cameraMode, textureStyle]);
 
-  // Adjust Sky Lighting based on timeOfDay
+  // Adjust Sky Lighting & Sky Dome Tint based on timeOfDay
   useEffect(() => {
     if (!sceneRef.current || !lightsRef.current) return;
     const { dirLight, ambientLight } = lightsRef.current;
 
     if (timeOfDay === 'day') {
       sceneRef.current.background = new THREE.Color(0x38bdf8);
-      sceneRef.current.fog = new THREE.FogExp2(0x38bdf8, 0.012);
+      sceneRef.current.fog = new THREE.FogExp2(0x38bdf8, 0.008);
       dirLight.color.setHex(0xffffff);
       dirLight.intensity = 2.4;
       ambientLight.color.setHex(0xe0f2fe);
       ambientLight.intensity = 1.0;
+      if (skyMeshRef.current && (skyMeshRef.current.material as THREE.MeshBasicMaterial).color) {
+        (skyMeshRef.current.material as THREE.MeshBasicMaterial).color.setHex(0xdbeafe);
+      }
     } else if (timeOfDay === 'sunset') {
       sceneRef.current.background = new THREE.Color(0x1e1b4b);
-      sceneRef.current.fog = new THREE.FogExp2(0x1e1b4b, 0.015);
+      sceneRef.current.fog = new THREE.FogExp2(0x1e1b4b, 0.012);
       dirLight.color.setHex(0xfb923c);
       dirLight.intensity = 2.2;
       ambientLight.color.setHex(0xfed7aa);
       ambientLight.intensity = 0.8;
+      if (skyMeshRef.current && (skyMeshRef.current.material as THREE.MeshBasicMaterial).color) {
+        (skyMeshRef.current.material as THREE.MeshBasicMaterial).color.setHex(0xfb923c);
+      }
     } else {
       sceneRef.current.background = new THREE.Color(0x020617);
-      sceneRef.current.fog = new THREE.FogExp2(0x020617, 0.02);
+      sceneRef.current.fog = new THREE.FogExp2(0x020617, 0.015);
       dirLight.color.setHex(0x38bdf8);
       dirLight.intensity = 0.8;
       ambientLight.color.setHex(0x1e293b);
       ambientLight.intensity = 0.5;
+      if (skyMeshRef.current && (skyMeshRef.current.material as THREE.MeshBasicMaterial).color) {
+        (skyMeshRef.current.material as THREE.MeshBasicMaterial).color.setHex(0xffffff);
+      }
     }
   }, [timeOfDay]);
 
@@ -869,6 +991,81 @@ export const Citadel3DWorld: React.FC = () => {
             >
               <Moon className="w-4 h-4" />
             </button>
+          </div>
+
+          <div className="w-px h-4 bg-slate-800 my-auto" />
+
+          {/* 3D Texture Engine Style Picker */}
+          <div className="relative">
+            <button
+              onClick={() => setShowTextureMenu(!showTextureMenu)}
+              className="px-2.5 py-1.5 rounded-lg text-xs font-mono transition-all cursor-pointer whitespace-nowrap bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5 font-bold"
+              title="Alternar Texturas 3D Procedurais"
+            >
+              <Palette className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Texturas 3D</span>
+              <span className="text-[10px] px-1 py-0.2 rounded bg-emerald-950 text-emerald-300 font-normal">
+                {textureStyle === 'realistic-pbr' ? 'PBR Ultra' : textureStyle === 'hologram' ? 'Holográfico' : 'Ouro Solar'}
+              </span>
+            </button>
+
+            {showTextureMenu && (
+              <div className="absolute right-0 top-full mt-2 w-64 bg-slate-900/95 backdrop-blur-xl border border-slate-700/80 rounded-xl p-2.5 shadow-2xl z-50 text-xs">
+                <div className="text-[10px] font-mono text-slate-400 uppercase tracking-wider mb-2 font-bold flex items-center justify-between">
+                  <span>Shader & Texturas 3D</span>
+                  <span className="text-emerald-400 font-mono">PBR Ultra</span>
+                </div>
+
+                <div className="space-y-1">
+                  <button
+                    onClick={() => { setTextureStyle('realistic-pbr'); setShowTextureMenu(false); }}
+                    className={`w-full flex items-center justify-between p-2 rounded-lg text-left transition-colors cursor-pointer ${
+                      textureStyle === 'realistic-pbr' ? 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-bold' : 'hover:bg-slate-800 text-slate-300'
+                    }`}
+                  >
+                    <div>
+                      <div className="font-semibold">PBR Realista Ultra HD</div>
+                      <div className="text-[10px] text-slate-400">Musgo alien, titânio escovado e relevo</div>
+                    </div>
+                    {textureStyle === 'realistic-pbr' && <Check className="w-4 h-4 text-emerald-400" />}
+                  </button>
+
+                  <button
+                    onClick={() => { setTextureStyle('solar-gold'); setShowTextureMenu(false); }}
+                    className={`w-full flex items-center justify-between p-2 rounded-lg text-left transition-colors cursor-pointer ${
+                      textureStyle === 'solar-gold' ? 'bg-amber-500/20 border border-amber-500/40 text-amber-300 font-bold' : 'hover:bg-slate-800 text-slate-300'
+                    }`}
+                  >
+                    <div>
+                      <div className="font-semibold">Ouro Solar Aetheriano</div>
+                      <div className="text-[10px] text-slate-400">Brilho âmbar e energia fotovoltaica</div>
+                    </div>
+                    {textureStyle === 'solar-gold' && <Check className="w-4 h-4 text-amber-400" />}
+                  </button>
+
+                  <button
+                    onClick={() => { setTextureStyle('hologram'); setShowTextureMenu(false); }}
+                    className={`w-full flex items-center justify-between p-2 rounded-lg text-left transition-colors cursor-pointer ${
+                      textureStyle === 'hologram' ? 'bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 font-bold' : 'hover:bg-slate-800 text-slate-300'
+                    }`}
+                  >
+                    <div>
+                      <div className="font-semibold">Matriz Holográfica Neon</div>
+                      <div className="text-[10px] text-slate-400">Wireframe ciberespacial ciano</div>
+                    </div>
+                    {textureStyle === 'hologram' && <Check className="w-4 h-4 text-cyan-400" />}
+                  </button>
+                </div>
+
+                <div className="mt-2.5 pt-2 border-t border-slate-800 text-[10px] text-slate-400 flex flex-wrap gap-1">
+                  <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-mono">Albedo 512px</span>
+                  <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-mono">Bump/Normal</span>
+                  <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-mono">Roughness</span>
+                  <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-mono">Anisotropia x16</span>
+                  <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-mono">Céu Nebular HD</span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
