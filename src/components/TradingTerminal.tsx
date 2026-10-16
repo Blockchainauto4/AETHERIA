@@ -11,7 +11,8 @@ import {
   CheckCircle2, 
   AlertCircle,
   X,
-  TrendingUp
+  TrendingUp,
+  Sparkles
 } from 'lucide-react';
 
 export const TradingTerminal: React.FC = () => {
@@ -21,7 +22,8 @@ export const TradingTerminal: React.FC = () => {
     assets,
     orders,
     placeOrder,
-    cancelOrder
+    cancelOrder,
+    setActiveTab
   } = useExchange();
 
   const [baseSymbol, quoteSymbol] = selectedPair.split('/');
@@ -154,6 +156,15 @@ export const TradingTerminal: React.FC = () => {
             <span className="text-[10px] uppercase text-slate-500 block">Volume 24h</span>
             <span className="text-slate-200">${(baseAsset.volume24hUsd / 1e9).toFixed(2)}B</span>
           </div>
+
+          <button
+            onClick={() => setActiveTab('ai-agents')}
+            className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 via-cyan-500/20 to-emerald-500/20 hover:from-amber-500/30 hover:to-cyan-500/30 border border-amber-500/50 text-amber-300 text-xs font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm hover:scale-105"
+            title="Abrir o Sistema de 10 Agentes de IA para Assistência de Trading"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-400 animate-spin" style={{ animationDuration: '6s' }} />
+            <span>10 Agentes IA</span>
+          </button>
         </div>
       </div>
 

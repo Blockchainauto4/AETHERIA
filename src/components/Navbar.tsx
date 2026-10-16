@@ -20,7 +20,7 @@ export const Navbar: React.FC = () => {
     { id: 'ecosystem', label: 'Cidadela 2D' },
     { id: 'citadel-3d', label: 'Mundo 3D & Agente', highlight: true },
     { id: 'trading', label: 'Trading Spot' },
-    { id: 'ai-agents', label: 'Agentes IA' },
+    { id: 'ai-agents', label: '10 Agentes IA', highlight: true },
     { id: 'swap', label: 'Swap' },
     { id: 'earn', label: 'Cofres & Staking' },
     { id: 'reserves', label: 'Prova de Reservas' },
